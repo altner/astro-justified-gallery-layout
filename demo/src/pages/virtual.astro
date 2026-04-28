@@ -1,0 +1,124 @@
+---
+import { getCollection } from "astro:content";
+import JustifiedGalleryVirtual from "@altner/astro-justified-gallery-layout/JustifiedGalleryVirtual.astro";
+import Base from "../layouts/Base.astro";
+import {
+  computeYearMonthStats,
+  filterByYearMonth,
+  monthName,
+  monthsForYear,
+} from "../lib/dateFilter";
+
+const yearParam = Astro.url.searchParams.get("year") ?? "";
+const monthParam = Astro.url.searchParams.get("month") ?? "";
+
+const allPhotos = await getCollection("photos");
+const { yearCount, ymCount, undated } = computeYearMonthStats(allPhotos);
+const years = [...yearCount.keys()].sort();
+const months = monthsForYear(ymCount, yearParam || null);
+
+const filteredCount = filterByYearMonth(allPhotos, yearParam, monthParam).length;
+
+const endpointUrl = (() => {
+  const u = new URLSearchParams();
+  if (yearParam) u.set("year", yearParam);
+  if (monthParam) u.set("month", monthParam);
+  const q = u.toString();
+  return q ? `/api/gallery.json?${q}` : "/api/gallery.json";
+})();
+
+const filterActive = Boolean(yearParam || monthParam);
+---
+
+<Base title="Virtual · astro-justified-gallery-layout">
+  <h1>Virtualized Gallery</h1>
+
+  <form class="filter" method="get">
+    <label>
+      <span>Jahr</span>
+      <select name="year" onchange="this.form.submit()">
+        <option value="">Alle ({allPhotos.length - undated})</option>
+        {
+          years.map((y) => (
+            <option value={y} selected={y === yearParam}>
+              {y} ({yearCount.get(y)})
+            </option>
+          ))
+        }
+      </select>
+    </label>
+    <label>
+      <span>Monat</span>
+      <select name="month" onchange="this.form.submit()">
+        <option value="">Alle</option>
+        {
+          months.map(({ month, count }) => (
+            <option value={month} selected={month === monthParam}>
+              {monthName(month)} ({count})
+            </option>
+          ))
+        }
+      </select>
+    </label>
+    {
+      filterActive && (
+        <a class="filter-reset" href={Astro.url.pathname}>
+          Zurücksetzen
+        </a>
+      )
+    }
+    <noscript>
+      <button type="submit">Filtern</button>
+    </noscript>
+  </form>
+
+  <p class="meta">
+    {filteredCount} Foto{filteredCount === 1 ? "" : "s"}.
+    Server schickt einen leeren Container; der Client lädt Chunks à 50 von
+    <code>{endpointUrl}</code> und behält nur Items nahe des Viewports im DOM.
+  </p>
+
+  <JustifiedGalleryVirtual
+    endpoint={endpointUrl}
+    targetRowHeight={240}
+    gap={6}
+    chunkSize={50}
+    bufferRows={5}
+    lightbox
+  />
+
+  <style>
+    .filter {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: end;
+      gap: 0.75rem 1rem;
+      padding: 0.75rem 1rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--fg) 3%, transparent);
+      margin: 1rem 0 1.25rem;
+    }
+    .filter label {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+    .filter select {
+      font: inherit;
+      padding: 0.3rem 0.5rem;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--bg);
+      color: var(--fg);
+      min-width: 140px;
+    }
+    .filter-reset {
+      font-size: 0.875rem;
+      color: var(--muted);
+      text-decoration: underline;
+    }
+  </style>
+</Base>

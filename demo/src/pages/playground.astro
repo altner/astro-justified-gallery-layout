@@ -1,0 +1,89 @@
+---
+import { getCollection } from "astro:content";
+import JustifiedGallery from "@altner/astro-justified-gallery-layout/JustifiedGallery.astro";
+import Base from "../layouts/Base.astro";
+import { buildCaption } from "../lib/caption";
+
+const allPhotos = await getCollection("photos");
+const images = allPhotos.map((p) => ({
+  src: p.data.src,
+  alt: p.data.alt,
+  caption: buildCaption(p.data.meta, p.data.alt),
+  preview: p.data.preview,
+}));
+---
+
+<Base title="Playground · astro-justified-gallery-layout">
+  <h1>Playground</h1>
+  <p class="meta">Tweak parameters live. Layout recomputes on each change.</p>
+
+  <div class="controls">
+    <label>
+      <span>targetRowHeight: <output id="out-trh">240</output> px</span>
+      <input id="trh" type="range" min="80" max="500" step="10" value="240" />
+    </label>
+    <label>
+      <span>gap: <output id="out-gap">6</output> px</span>
+      <input id="gap" type="range" min="0" max="40" step="1" value="6" />
+    </label>
+    <label>
+      <span>maxRowHeight: <output id="out-mrh">360</output> px</span>
+      <input id="mrh" type="range" min="80" max="800" step="10" value="360" />
+    </label>
+  </div>
+
+  <JustifiedGallery
+    class="playground-gallery"
+    images={images}
+    targetRowHeight={240}
+    gap={6}
+    maxRowHeight={360}
+    chunkSize={30}
+    lightbox
+  />
+
+  <style>
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      margin: 1.5rem 0 2rem;
+      padding: 1rem 1.25rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--fg) 3%, transparent);
+    }
+    .controls label {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      font-size: 0.875rem;
+    }
+    .controls input[type="range"] {
+      width: 100%;
+    }
+    .controls output {
+      font-variant-numeric: tabular-nums;
+      font-weight: 600;
+    }
+  </style>
+
+  <script>
+    const root = document.querySelector<HTMLElement>(".playground-gallery");
+    if (root) {
+      const bind = (id: string, attr: string, outId: string) => {
+        const input = document.getElementById(id) as HTMLInputElement | null;
+        const out = document.getElementById(outId) as HTMLOutputElement | null;
+        if (!input || !out) return;
+        input.addEventListener("input", () => {
+          root.dataset[attr] = input.value;
+          out.value = input.value;
+          root.dispatchEvent(new CustomEvent("ajg:relayout"));
+        });
+      };
+      bind("trh", "targetRowHeight", "out-trh");
+      bind("gap", "gap", "out-gap");
+      bind("mrh", "maxRowHeight", "out-mrh");
+    }
+  </script>
+</Base>

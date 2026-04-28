@@ -1,0 +1,67 @@
+{
+  "name": "@altner/astro-justified-gallery-layout",
+  "version": "0.6.0",
+  "description": "Justified gallery layout for Astro. Pure-function core + <JustifiedGallery /> component with automatic image optimization. Zero runtime deps, ESM, TypeScript types included.",
+  "type": "module",
+  "main": "src/index.js",
+  "module": "src/index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./src/index.js",
+      "default": "./src/index.js"
+    },
+    "./JustifiedGallery.astro": "./src/JustifiedGallery.astro",
+    "./JustifiedGalleryVirtual.astro": "./src/JustifiedGalleryVirtual.astro",
+    "./Lightbox.astro": "./src/Lightbox.astro",
+    "./loader": {
+      "types": "./loader.d.ts",
+      "import": "./src/loader.js",
+      "default": "./src/loader.js"
+    },
+    "./exif": {
+      "types": "./exif.d.ts",
+      "import": "./src/exif.js",
+      "default": "./src/exif.js"
+    }
+  },
+  "files": [
+    "src",
+    "index.d.ts",
+    "loader.d.ts",
+    "exif.d.ts",
+    "JustifiedGalleryVirtual.d.ts",
+    "Lightbox.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "peerDependencies": {
+    "astro": ">=4",
+    "exifr": ">=7"
+  },
+  "peerDependenciesMeta": {
+    "astro": {
+      "optional": true
+    },
+    "exifr": {
+      "optional": true
+    }
+  },
+  "keywords": [
+    "astro",
+    "astro-component",
+    "justified-layout",
+    "masonry",
+    "gallery",
+    "layout",
+    "photos",
+    "esm"
+  ],
+  "license": "MIT",
+  "author": "Adrian Altner"
+}

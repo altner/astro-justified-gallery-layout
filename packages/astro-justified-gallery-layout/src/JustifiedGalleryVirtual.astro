@@ -1,0 +1,437 @@
+---
+export interface Props {
+  /** Endpoint that returns `{ items: PhotoItem[], total: number }`. */
+  endpoint: string;
+  targetRowHeight?: number;
+  gap?: number;
+  /** Items per fetched chunk. Default 50. */
+  chunkSize?: number;
+  /** Extra rows above/below the viewport to keep in the DOM. Default 5. */
+  bufferRows?: number;
+  /**
+   * When true, items become clickable triggers for the `<Lightbox />`
+   * component (which must be placed once on the page).
+   */
+  lightbox?: boolean;
+  class?: string;
+}
+
+const {
+  endpoint,
+  targetRowHeight = 240,
+  gap = 6,
+  chunkSize = 50,
+  bufferRows = 5,
+  lightbox = false,
+  class: className,
+} = Astro.props;
+---
+
+<div
+  class:list={["ajgv-root", className]}
+  data-endpoint={endpoint}
+  data-target-row-height={targetRowHeight}
+  data-gap={gap}
+  data-chunk-size={chunkSize}
+  data-buffer-rows={bufferRows}
+  data-lightbox={lightbox ? "1" : ""}
+  style={`--ajgv-gap: ${gap}px;`}
+>
+  <div class="ajgv-status" aria-live="polite">Loading…</div>
+</div>
+
+<style is:global>
+  .ajgv-root {
+    position: relative;
+    width: 100%;
+  }
+  .ajgv-item {
+    position: absolute;
+    top: 0;
+    left: 0;
+    overflow: hidden;
+    background-color: color-mix(in srgb, currentColor 8%, transparent);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+  .ajgv-item img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: opacity 180ms ease;
+  }
+  .ajgv-item img.ajgv-loading {
+    opacity: 0;
+  }
+  .ajgv-status {
+    padding: 1rem 0;
+    font-size: 0.875rem;
+    opacity: 0.6;
+  }
+  .ajgv-root.ajgv-ready .ajgv-status {
+    display: none;
+  }
+  .ajgv-link {
+    display: block;
+    width: 100%;
+    height: 100%;
+    color: inherit;
+    text-decoration: none;
+    position: relative;
+  }
+  .ajgv-root[data-lightbox="1"] .ajgv-item {
+    cursor: zoom-in;
+  }
+  .ajgv-caption {
+    position: absolute;
+    inset: auto 0 0 0;
+    padding: 0.6rem 0.7rem;
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.75));
+    color: #fff;
+    font-size: 0.75rem;
+    line-height: 1.35;
+    opacity: 0;
+    transform: translateY(20%);
+    transition:
+      opacity 0.15s ease,
+      transform 0.15s ease;
+    pointer-events: none;
+  }
+  .ajgv-caption .ajg-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 0.15rem;
+  }
+  .ajgv-caption .ajg-tech {
+    opacity: 0.85;
+    font-variant-numeric: tabular-nums;
+  }
+  .ajgv-caption .ajg-meta {
+    opacity: 0.7;
+    font-size: 0.7rem;
+  }
+  .ajgv-caption .ajg-keywords {
+    margin-top: 0.3rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+  .ajgv-caption .ajg-keyword {
+    background: rgba(255, 255, 255, 0.18);
+    padding: 0.05rem 0.4rem;
+    border-radius: 999px;
+    font-size: 0.65rem;
+    line-height: 1.4;
+  }
+  .ajgv-item:hover .ajgv-caption,
+  .ajgv-item:focus-within .ajgv-caption {
+    opacity: 1;
+    transform: translateY(0);
+  }
+</style>
+
+<script>
+  import { computeLayout } from "./index.js";
+
+  type PhotoItem = {
+    src: string;
+    srcset?: string;
+    sizes?: string;
+    w: number;
+    h: number;
+    alt?: string;
+    /** Caption HTML (trusted; not sanitized). */
+    caption?: string;
+    /** Optional link href; wraps the item in an `<a>`. */
+    href?: string;
+    /**
+     * Optional tiny LQIP preview (typically a `data:` URI). Stored on the
+     * `<img>` as `data-preview`; the `<Lightbox />` reads it for instant
+     * preview painting before the high-res variant arrives.
+     */
+    preview?: string;
+  };
+  type Row = {
+    height: number;
+    top: number;
+    items: { idx: number; left: number; width: number }[];
+  };
+  type Root = HTMLElement & { __ajgvCleanup?: () => void };
+
+  function readNumber(el: HTMLElement, key: string, fallback: number): number {
+    const raw = el.dataset[key];
+    if (raw == null || raw === "") return fallback;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  function init(root: Root) {
+    if (root.__ajgvCleanup) return;
+
+    const endpoint = root.dataset.endpoint;
+    if (!endpoint) return;
+
+    const targetRowHeight = readNumber(root, "targetRowHeight", 240);
+    const gap = readNumber(root, "gap", 6);
+    const chunkSize = readNumber(root, "chunkSize", 50);
+    const bufferRows = readNumber(root, "bufferRows", 5);
+
+    let total = -1;
+    const items: PhotoItem[] = [];
+    let rows: Row[] = [];
+    let totalHeight = 0;
+    let containerWidth = root.clientWidth;
+    let fetching = false;
+    let raf = 0;
+
+    const pool: HTMLElement[] = [];
+    const active = new Map<number, HTMLElement>();
+
+    const acquire = (): HTMLElement => {
+      const node = pool.pop();
+      if (node) {
+        // Reset link wrapper state from previous use.
+        const link = node.querySelector<HTMLAnchorElement>(".ajgv-link");
+        if (link) link.removeAttribute("href");
+        const cap = node.querySelector<HTMLDivElement>(".ajgv-caption");
+        if (cap) cap.style.display = "none";
+        return node;
+      }
+      const div = document.createElement("div");
+      div.className = "ajgv-item";
+      const link = document.createElement("a");
+      link.className = "ajgv-link";
+      const img = document.createElement("img");
+      // The windowing mechanism is itself the lazy strategy — items only
+      // enter the DOM when they're within the buffer of the viewport. Using
+      // loading="lazy" on top of that adds a second visibility check that
+      // sometimes fails to trigger on rapidly-inserted elements, leaving
+      // empty boxes until the user hovers.
+      img.loading = "eager";
+      img.decoding = "async";
+      link.appendChild(img);
+      const caption = document.createElement("div");
+      caption.className = "ajgv-caption";
+      caption.style.display = "none";
+      link.appendChild(caption);
+      div.appendChild(link);
+      return div;
+    };
+
+    const release = (node: HTMLElement) => {
+      node.remove();
+      pool.push(node);
+    };
+
+    const recompute = () => {
+      if (containerWidth <= 0 || items.length === 0) {
+        rows = [];
+        totalHeight = 0;
+        root.style.height = "0px";
+        return;
+      }
+      const dims = items.map((it) => ({ w: it.w, h: it.h }));
+      const { boxes, totalHeight: th } = computeLayout(dims, {
+        containerWidth,
+        targetRowHeight,
+        gap,
+      });
+      // Group boxes by their top coordinate to reconstruct rows.
+      const byTop = new Map<number, Row>();
+      for (let i = 0; i < boxes.length; i++) {
+        const b = boxes[i];
+        let row = byTop.get(b.top);
+        if (!row) {
+          row = { top: b.top, height: b.height, items: [] };
+          byTop.set(b.top, row);
+        }
+        row.items.push({ idx: i, left: b.left, width: b.width });
+      }
+      rows = Array.from(byTop.values()).sort((a, b) => a.top - b.top);
+      totalHeight = th;
+      root.style.height = `${totalHeight}px`;
+    };
+
+    const findRowRange = (
+      viewTop: number,
+      viewBottom: number,
+    ): [number, number] => {
+      if (!rows.length) return [0, -1];
+      // Binary search for first row whose bottom is >= viewTop.
+      let lo = 0;
+      let hi = rows.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (rows[mid].top + rows[mid].height < viewTop) lo = mid + 1;
+        else hi = mid;
+      }
+      const first = lo;
+      // Binary search for last row whose top is <= viewBottom.
+      lo = first;
+      hi = rows.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1;
+        if (rows[mid].top > viewBottom) hi = mid - 1;
+        else lo = mid;
+      }
+      return [
+        Math.max(0, first - bufferRows),
+        Math.min(rows.length - 1, lo + bufferRows),
+      ];
+    };
+
+    const render = () => {
+      if (!rows.length) return;
+
+      const rect = root.getBoundingClientRect();
+      const rootTopInDoc = rect.top + window.scrollY;
+      const viewTop = window.scrollY - rootTopInDoc;
+      const viewBottom = viewTop + window.innerHeight;
+
+      const [first, last] = findRowRange(viewTop, viewBottom);
+
+      const wanted = new Set<number>();
+      for (let r = first; r <= last; r++) {
+        for (const it of rows[r].items) wanted.add(it.idx);
+      }
+
+      // Remove inactive nodes.
+      for (const [idx, node] of active) {
+        if (!wanted.has(idx)) {
+          active.delete(idx);
+          release(node);
+        }
+      }
+
+      // Add or update wanted nodes.
+      for (let r = first; r <= last; r++) {
+        const row = rows[r];
+        for (const it of row.items) {
+          let node = active.get(it.idx);
+          if (!node) {
+            node = acquire();
+            const data = items[it.idx];
+            const link = node.querySelector<HTMLAnchorElement>(".ajgv-link")!;
+            const img = link.querySelector<HTMLImageElement>("img")!;
+            const cap = link.querySelector<HTMLDivElement>(".ajgv-caption")!;
+            // Set intrinsic dimensions so the browser knows the aspect ratio
+            // before the image loads — otherwise object-fit can crop visibly.
+            img.width = data.w;
+            img.height = data.h;
+            img.src = data.src;
+            if (data.srcset) img.srcset = data.srcset;
+            else img.removeAttribute("srcset");
+            if (data.sizes) img.sizes = data.sizes;
+            else img.removeAttribute("sizes");
+            img.alt = data.alt ?? "";
+            if (data.preview) img.dataset.preview = data.preview;
+            else delete img.dataset.preview;
+            if (data.href) link.href = data.href;
+            if (data.caption) {
+              cap.innerHTML = data.caption;
+              cap.style.display = "";
+            } else {
+              cap.innerHTML = "";
+              cap.style.display = "none";
+            }
+            root.appendChild(node);
+            active.set(it.idx, node);
+          }
+          node.style.left = `${it.left}px`;
+          node.style.top = `${row.top}px`;
+          node.style.width = `${it.width}px`;
+          node.style.height = `${row.height}px`;
+        }
+      }
+
+      // Trigger fetch when last visible row is near the loaded tail.
+      if (
+        (total < 0 || items.length < total) &&
+        last >= rows.length - bufferRows
+      ) {
+        fetchNext();
+      }
+    };
+
+    const schedule = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        render();
+      });
+    };
+
+    const fetchNext = async () => {
+      if (fetching) return;
+      if (total >= 0 && items.length >= total) return;
+      fetching = true;
+      try {
+        const url = new URL(endpoint, window.location.origin);
+        url.searchParams.set("offset", String(items.length));
+        url.searchParams.set("limit", String(chunkSize));
+        const res = await fetch(url.toString());
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as { items: PhotoItem[]; total?: number };
+        items.push(...data.items);
+        if (typeof data.total === "number") total = data.total;
+        recompute();
+        render();
+        root.classList.add("ajgv-ready");
+        // Keep filling if the loaded layout still doesn't reach the viewport bottom.
+        if (
+          (total < 0 || items.length < total) &&
+          totalHeight < window.innerHeight * 1.5
+        ) {
+          fetching = false;
+          fetchNext();
+          return;
+        }
+      } catch (err) {
+        const status = root.querySelector(".ajgv-status");
+        if (status) status.textContent = `Error: ${String(err)}`;
+      } finally {
+        fetching = false;
+      }
+    };
+
+    const onScroll = () => schedule();
+    const onResize = () => {
+      const w = root.clientWidth;
+      if (w !== containerWidth) {
+        containerWidth = w;
+        recompute();
+      }
+      schedule();
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    const ro = new ResizeObserver(onResize);
+    ro.observe(root);
+
+    fetchNext();
+
+    root.__ajgvCleanup = () => {
+      window.removeEventListener("scroll", onScroll);
+      ro.disconnect();
+      if (raf) cancelAnimationFrame(raf);
+      for (const node of active.values()) node.remove();
+      active.clear();
+      pool.length = 0;
+    };
+  }
+
+  function bootstrap() {
+    document
+      .querySelectorAll<Root>(".ajgv-root")
+      .forEach((el) => init(el));
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bootstrap, { once: true });
+  } else {
+    bootstrap();
+  }
+  document.addEventListener("astro:page-load", bootstrap);
+</script>

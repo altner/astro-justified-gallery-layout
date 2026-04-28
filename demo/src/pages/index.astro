@@ -1,0 +1,161 @@
+---
+import { getCollection } from "astro:content";
+import JustifiedGallery from "@altner/astro-justified-gallery-layout/JustifiedGallery.astro";
+import Base from "../layouts/Base.astro";
+import { buildCaption } from "../lib/caption";
+import {
+  computeYearMonthStats,
+  filterByYearMonth,
+  monthName,
+  monthsForYear,
+} from "../lib/dateFilter";
+
+const yearParam = Astro.url.searchParams.get("year") ?? "";
+const monthParam = Astro.url.searchParams.get("month") ?? "";
+
+const allPhotos = await getCollection("photos");
+const { yearCount, ymCount, undated } = computeYearMonthStats(allPhotos);
+const years = [...yearCount.keys()].sort();
+const months = monthsForYear(ymCount, yearParam || null);
+
+const filtered = filterByYearMonth(allPhotos, yearParam, monthParam);
+const images = filtered.map((p) => ({
+  src: p.data.src,
+  alt: p.data.alt,
+  caption: buildCaption(p.data.meta, p.data.alt),
+  preview: p.data.preview,
+}));
+
+const filterActive = Boolean(yearParam || monthParam);
+---
+
+<Base title="Demo · astro-justified-gallery-layout">
+  <h1>Justified Gallery — Demo</h1>
+
+  <form class="filter" method="get">
+    <label>
+      <span>Jahr</span>
+      <select name="year" onchange="this.form.submit()">
+        <option value="">Alle ({allPhotos.length - undated})</option>
+        {
+          years.map((y) => (
+            <option value={y} selected={y === yearParam}>
+              {y} ({yearCount.get(y)})
+            </option>
+          ))
+        }
+      </select>
+    </label>
+    <label>
+      <span>Monat</span>
+      <select name="month" onchange="this.form.submit()">
+        <option value="">Alle</option>
+        {
+          months.map(({ month, count }) => (
+            <option value={month} selected={month === monthParam}>
+              {monthName(month)} ({count})
+            </option>
+          ))
+        }
+      </select>
+    </label>
+    {
+      filterActive && (
+        <a class="filter-reset" href={Astro.url.pathname}>
+          Zurücksetzen
+        </a>
+      )
+    }
+    <noscript>
+      <button type="submit">Filtern</button>
+    </noscript>
+  </form>
+
+  <p class="meta">
+    {
+      filterActive
+        ? `${images.length} Foto${images.length === 1 ? "" : "s"} im Filter (von ${allPhotos.length} insgesamt).`
+        : `Alle ${images.length} Fotos aus der Collection.`
+    }
+    {undated > 0 && !filterActive && <span> {undated} ohne EXIF-Datum.</span>}
+  </p>
+
+  {
+    images.length === 0 ? (
+      <p class="meta">Keine Fotos für diese Auswahl.</p>
+    ) : (
+      <>
+        <h2>
+          Standard
+          <span class="meta">— targetRowHeight: 240, gap: 6, chunkSize: 30</span>
+        </h2>
+        <JustifiedGallery
+          images={images}
+          targetRowHeight={240}
+          gap={6}
+          chunkSize={30}
+          lightbox
+        />
+
+        <h2>
+          Compact
+          <span class="meta">— targetRowHeight: 140, gap: 2, chunkSize: 60</span>
+        </h2>
+        <JustifiedGallery
+          images={images}
+          targetRowHeight={140}
+          gap={2}
+          chunkSize={60}
+          lightbox
+        />
+
+        <h2>
+          Large
+          <span class="meta">— targetRowHeight: 360, gap: 12, chunkSize: 20</span>
+        </h2>
+        <JustifiedGallery
+          images={images}
+          targetRowHeight={360}
+          gap={12}
+          chunkSize={20}
+          lightbox
+        />
+      </>
+    )
+  }
+
+  <style>
+    .filter {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: end;
+      gap: 0.75rem 1rem;
+      padding: 0.75rem 1rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--fg) 3%, transparent);
+      margin: 1rem 0 1.25rem;
+    }
+    .filter label {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+    .filter select {
+      font: inherit;
+      padding: 0.3rem 0.5rem;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--bg);
+      color: var(--fg);
+      min-width: 140px;
+    }
+    .filter-reset {
+      font-size: 0.875rem;
+      color: var(--muted);
+      text-decoration: underline;
+    }
+  </style>
+</Base>
