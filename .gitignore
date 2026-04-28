@@ -9,3 +9,6 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 .idea/
+
+# Personal demo photos — drop your own images into demo/src/assets/photos/
+demo/src/assets/photos/

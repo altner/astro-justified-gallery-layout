@@ -99,6 +99,9 @@ const {
       transform 0.15s ease;
     pointer-events: none;
   }
+  .ajgv-caption a {
+    pointer-events: auto;
+  }
   .ajgv-caption .ajg-title {
     font-size: 0.875rem;
     font-weight: 600;
@@ -316,6 +319,18 @@ const {
             const link = node.querySelector<HTMLAnchorElement>(".ajgv-link")!;
             const img = link.querySelector<HTMLImageElement>("img")!;
             const cap = link.querySelector<HTMLDivElement>(".ajgv-caption")!;
+            // LQIP placeholder on the container shows immediately while the
+            // real image loads. Hide the img with opacity:0 until it loads
+            // so we don't see a stale bitmap from a recycled node.
+            if (data.preview) {
+              node.style.backgroundImage = `url("${data.preview}")`;
+            } else {
+              node.style.backgroundImage = "";
+            }
+            img.classList.add("ajgv-loading");
+            const handleLoad = () => img.classList.remove("ajgv-loading");
+            img.addEventListener("load", handleLoad, { once: true });
+            img.addEventListener("error", handleLoad, { once: true });
             // Set intrinsic dimensions so the browser knows the aspect ratio
             // before the image loads — otherwise object-fit can crop visibly.
             img.width = data.w;
@@ -329,6 +344,11 @@ const {
             if (data.preview) img.dataset.preview = data.preview;
             else delete img.dataset.preview;
             if (data.href) link.href = data.href;
+            // If the browser already had it cached, `load` may have fired
+            // synchronously before our listener — clear the loading class.
+            if (img.complete && img.naturalWidth > 0) {
+              img.classList.remove("ajgv-loading");
+            }
             if (data.caption) {
               cap.innerHTML = data.caption;
               cap.style.display = "";

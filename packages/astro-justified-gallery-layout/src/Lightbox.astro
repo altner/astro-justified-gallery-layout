@@ -271,10 +271,12 @@
       void navigate(-1);
     }
 
-    // Item click → open
+    // Item click → open. Skip clicks on links (e.g. GPS link inside caption)
+    // so they keep their normal navigation behavior.
     document.addEventListener("click", (ev) => {
       const target = ev.target as HTMLElement | null;
       if (!target) return;
+      if (target.closest("a[href]")) return;
       const item = target.closest<HTMLElement>(itemSelector);
       if (!item) return;
       const root = item.closest<HTMLElement>(rootSelector);

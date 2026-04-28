@@ -4,12 +4,15 @@ Local Astro app for developing and testing `@altner/astro-justified-gallery-layo
 
 ## Pages
 
-- `/` — three galleries with different `targetRowHeight` / `gap` settings
+- `/` — three galleries with different `targetRowHeight` / `gap` settings, year/month filter, lightbox
 - `/playground` — sliders to tweak parameters live
+- `/virtual` — virtualized gallery with paginated API endpoint, year/month filter
 
 ## Photos
 
-Drop images into `src/assets/photos/` (jpg, jpeg, png, webp, avif). They are imported via `import.meta.glob` and served through Astro's `<Image />` pipeline. The demo currently caps at the first 60 alphabetically to keep build/dev fast.
+Drop images into `src/assets/photos/` (jpg, jpeg, png, webp, avif). The folder is `.gitignore`d on purpose — bring your own collection. Subdirectories are scanned recursively. The collection loader (`src/content.config.ts`) reads EXIF/IPTC/GPS metadata and generates LQIP previews automatically; the year/month filter UI is driven by `dateTaken`.
+
+If the folder is empty or missing, the demo just shows an empty gallery (no crash).
 
 ## Commands
 

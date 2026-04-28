@@ -1,7 +1,7 @@
 {
   "name": "@altner/astro-justified-gallery-layout",
   "version": "0.6.0",
-  "description": "Justified gallery layout for Astro. Pure-function core + <JustifiedGallery /> component with automatic image optimization. Zero runtime deps, ESM, TypeScript types included.",
+  "description": "Justified (Flickr-style) photo gallery for Astro. Static + virtualized components, content loader with EXIF/IPTC/GPS, LQIP previews, modal lightbox with swipe. ESM, TypeScript types, zero runtime deps in the core.",
   "type": "module",
   "main": "src/index.js",
   "module": "src/index.js",
@@ -32,7 +32,6 @@
     "loader.d.ts",
     "exif.d.ts",
     "JustifiedGalleryVirtual.d.ts",
-    "Lightbox.d.ts",
     "README.md",
     "LICENSE"
   ],
@@ -56,12 +55,29 @@
     "astro",
     "astro-component",
     "justified-layout",
+    "flickr-layout",
     "masonry",
     "gallery",
-    "layout",
-    "photos",
+    "photo-gallery",
+    "lightbox",
+    "image-gallery",
+    "lqip",
+    "exif",
+    "iptc",
     "esm"
   ],
   "license": "MIT",
-  "author": "Adrian Altner"
+  "author": "Adrian Altner",
+  "homepage": "https://github.com/altner/astro-justified-gallery-layout#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/altner/astro-justified-gallery-layout.git",
+    "directory": "packages/astro-justified-gallery-layout"
+  },
+  "bugs": {
+    "url": "https://github.com/altner/astro-justified-gallery-layout/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }
